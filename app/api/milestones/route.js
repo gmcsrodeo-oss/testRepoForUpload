@@ -1,44 +1,80 @@
-import { createClient } from "@/lib/supabase/client";
+
 import { NextResponse } from "next/server";
+import { getUserMilestones, getInitiativeMilestones } from "@/services/milestoneService";
+import { authenticateUser } from "../../auth/authenticate-user/authenticate-user";
 
 export async function GET(request) {
-    const { searchParams } = new URL(request.url);
-
-    //const userId = searchParams.get("userId");
-    const initiativeId = searchParams.get("initiativeId");
-
-    const supabase = new createClient();
-
     try {
-        // User's Milestone list.
-        // if (userId) {
-        //     const { milestonesByUser, error } = await supabase.from("")
-        // }
+        const isUserAuthenticated = await authenticateUser();
 
-        // Initiative's milestones.
-        if (initiativeId) {
-            const { data: milestonesByInitiative, error } = await supabase.from("milestones").select().eq("initiativeId", initiativeId).eq("isDeleted", false);
-
-            console.log("Initiative Id: " + initiativeId);
-            console.log("Milestones: " + milestonesByInitiative);
-
-            if(error) {
-                return NextResponse.json({
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
                     success: false,
-                    message: error.message
-                }, {status: 500});
-            }
-
-            return NextResponse.json({
-                success: true,
-                milestonesByInitiative,
-            }, { status: 200 });
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
         }
 
+        const { searchParams } = new URL(request.url);
+        const userId = searchParams.get("userId");
+        const initiativeId = searchParams.get("initiativeId");
+
+        // User's milestones
+        if (userId) {
+            const result = await getUserMilestones(userId);
+
+            if (!result.success) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: result.message
+                    },
+                    { status: 400 }
+                );
+            }
+
+            return NextResponse.json(
+                {
+                    success: true,
+                    milestones: result.data
+                },
+                { status: 200 }
+            );
+        }
+
+        // Initiative's milestones
+        if (initiativeId) {
+            const result = await getInitiativeMilestones(initiativeId);
+
+            if (!result.success) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: result.message
+                    },
+                    { status: 400 }
+                );
+            }
+
+            return NextResponse.json(
+                {
+                    success: true,
+                    milestones: result.data
+                },
+                { status: 200 }
+            );
+        }
+
+        // Neither ID was provided
         return NextResponse.json(
             {
                 success: false,
-                message : "userId or initiativeId is required",
+                error: "userId or initiativeId is required."
             },
             { status: 400 }
         );
@@ -46,7 +82,7 @@ export async function GET(request) {
         return NextResponse.json(
             {
                 success: false,
-                message:error.message,
+                error: error.message
             },
             { status: 500 }
         );

@@ -1,33 +1,45 @@
 import { NextResponse } from "next/server";
-import { createNewInitiative, deleteInitiative, getAllInitiatives, getAllInitiativesByStatus, getInitiativeById, updateInitiative } from "../repositories/initiativeRepository";
-import { InitiativeStatus } from "../enums/status";
+import { createNewInitiative, deleteInitiative, getAllInitiatives, getAllInitiativesByStatus, getInitiativeById, updateInitiative, getProposedInitiativeById, acceptInitiative, rejectInitiative, getAllInitiativesForUser } from "../repositories/initiativeRepository";
+import { getUserByUserId } from "../repositories/userRepository";
 
-export async function getProposedInitiativeById(supabase, initiativeId) {
-    const { data: initiativeData, error } = await supabase.from("initiative").select().eq("id", initiativeId).eq("status", InitiativeStatus.PROPOSED);
+export async function getProposedInitiative(initiativeId) {
+    try {
 
-    if(error) {
-        if(error.code == "PGRST116")
-        {
-            return NextResponse.json({
+        if (!initiativeId) {
+            return {
                 success: false,
-                message: "Initiative not found."
-            },{
-                status: 404
-            });
+                data: null,
+                code: "INITIATIVE_ID_REQUIRED",
+                message: "initiativeId is required."
+            };
         }
 
-        return NextResponse.json({
+        const initiative = await getProposedInitiativeById(initiativeId);
+
+        if (!initiative) {
+            return {
+                success: false,
+                data: null,
+                code: "INITIATIVE_NOT_FOUND",
+                message: "The initiative does not exist."
+            };
+        }
+
+        return {
+            success: true,
+            data: initiative,
+            code: null
+        };
+
+    } catch (error) {
+
+        return {
             success: false,
+            data: null,
+            code: "INITIATIVE_FETCH_FAILED",
             message: error.message
-        },{
-            status: 500
-        });
+        };
     }
-    
-    return NextResponse.json({
-        success: true,
-        initiativeData: initiativeData[0]
-    });
 }
 
 export async function getInitiatives()
@@ -73,9 +85,49 @@ export async function getInitiativesByStatus(status)
     }
 }
 
-export async function createInitiative(initiativeData)
-{
-    try{
+
+export async function getInitiativesForUser(userId) {
+    try {
+        if (!userId) {
+            return {
+                success: false,
+                data: null,
+                code: "USER_ID_REQUIRED",
+                message: "userId is required."
+            };
+        }
+
+        const user = await getUserByUserId(userId);
+
+        if (!user) {
+            return {
+                success: false,
+                data: null,
+                code: "USER_NOT_FOUND",
+                message: "User not found."
+            };
+        }
+
+        const initiatives = await getAllInitiativesForUser(userId);
+
+        return {
+            success: true,
+            data: initiatives,
+            code: null
+        };
+    } catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "INITIATIVES_FETCH_BY_USER_FAILED",
+            message: error.message
+        };
+    }
+}
+
+
+export async function createInitiative(initiativeData) {
+    try {
         const initiative = await createNewInitiative(initiativeData);
 
         return {
@@ -152,6 +204,81 @@ export async function deleteInitiativeById(initiativeId)
             success: false,
             data: null,
             code: "INITIATIVE_DELETION_FAILED",
+            message: error.message
+        };
+    }
+}
+
+export async function acceptInitiativeById(initiativeId, approvedBy) {
+    try {
+
+        const proposed = await getProposedInitiative(initiativeId);
+
+        if (!proposed.success) {
+            return proposed;
+        }
+
+        if (!approvedBy) {
+            return {
+                success: false,
+                data: null,
+                code: "APPROVER_REQUIRED",
+                message: "Approver user ID is required.",
+            };
+        }
+
+        const initiative = await acceptInitiative(initiativeId, approvedBy);
+
+        return {
+            success: true,
+            data: initiative,
+            code: null,
+            message: "The initiative has been accepted by Admin/Executive."
+        };
+
+    } catch (error) {
+
+        return {
+            success: false,
+            data: null,
+            code: "INITIATIVE_APPROVAL_FAILED",
+            message: error.message
+        };
+    }
+}
+
+export async function rejectInitiativeById(initiativeId, rejectionReason) {
+    try {
+        if (!rejectionReason?.trim()) {
+            return {
+                success: false,
+                data: null,
+                code: "REJECTION_REASON_REQUIRED",
+                message: "Rejection reason is required.",
+            };
+        }
+
+        const proposed = await getProposedInitiative(initiativeId);
+
+        if (!proposed.success) {
+            return proposed;
+        }
+
+        const initiative = await rejectInitiative(initiativeId,  rejectionReason.trim());
+
+        return {
+            success: true,
+            data: initiative,
+            code: null,
+            message: "The initiative has been rejected by Admin/Executive. Please reply by making modifications."
+        };
+
+    } catch (error) {
+
+        return {
+            success: false,
+            data: null,
+            code: "INITIATIVE_REJECTION_FAILED",
             message: error.message
         };
     }

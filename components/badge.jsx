@@ -1,15 +1,17 @@
 import { STATUS_CONFIG, HEALTH_CONFIG, FUNCTION_COLORS, ROLE_CONFIG } from "@/constants/constants";
 
 export function StatusBadge({ status }) {
-  const c = STATUS_CONFIG[status] || STATUS_CONFIG["Not Started"];
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c.color}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {status}
-    </span>
-  );
+    console.log(status);
+    const c = STATUS_CONFIG[status] || STATUS_CONFIG["Not Started"];
+    console.log(c.color);
+    return (
+        <span
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c?.color ?? "bg-gray-100 text-gray-700"}`}
+        >
+        <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+        {status}
+        </span>
+    );
 }
 export function FunctionBadge({ func }) {
   const c = FUNCTION_COLORS[func] || {
@@ -18,7 +20,7 @@ export function FunctionBadge({ func }) {
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${c.bg}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-gray-600 font-medium ${c.bg}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {func}

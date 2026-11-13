@@ -1,8 +1,24 @@
 import { NextResponse } from "next/server";
 import { deleteInitiativeById, getInitiativeByID, updateInitiativeById } from "../../../../services/initiativeService";
+import { authenticateUser } from "../../../auth/authenticate-user/authenticate-user";
 
 export async function GET(request, { params }) {
     try{
+        const isUserAuthenticated = await authenticateUser();
+
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
+        }
+
         const { initiativeId } = await params;
 
         const initiative = await getInitiativeByID(initiativeId);
@@ -39,6 +55,21 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
     try{
+        const isUserAuthenticated = await authenticateUser();
+
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
+        }
+
         const body = await request.json();
 
         const { initiativeId } = await params;
@@ -85,6 +116,21 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
     try{
+        const isUserAuthenticated = await authenticateUser();
+
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
+        }
+
         const { initiativeId } = await params;
 
         if(!initiativeId) {

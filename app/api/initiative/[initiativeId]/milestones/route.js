@@ -1,8 +1,24 @@
 import { createClient } from "@/lib/supabase/client";
 import { NextResponse } from "next/server";
+import { authenticateUser } from "../../../../auth/authenticate-user/authenticate-user";
 
 export async function POST(request, { params }) {
     try {
+        const isUserAuthenticated = await authenticateUser();
+
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
+        }
+
         const { initiativeId } = await params;
         const supabase = new createClient();
 
@@ -19,7 +35,6 @@ export async function POST(request, { params }) {
         var body = await request.json();
         body.initiativeId = initiativeId;
 
-
         if (!body.title || body.title.trim() === "") {
             return NextResponse.json(
                 {
@@ -30,10 +45,7 @@ export async function POST(request, { params }) {
             );
         }
 
-        if (
-            body.done !== undefined &&
-            typeof body.done !== "boolean"
-        ) {
+        if (body.done !== undefined && typeof body.done !== "boolean") {
             return NextResponse.json(
                 {
                     success: false,
@@ -58,7 +70,7 @@ export async function POST(request, { params }) {
 
         const { data: milestone, error } = await supabase.from("milestones").insert([body]).select();
 
-        if(error) {
+        if (error) {
             return NextResponse.json(
                 {
                     success: false,

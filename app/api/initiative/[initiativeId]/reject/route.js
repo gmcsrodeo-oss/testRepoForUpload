@@ -1,37 +1,67 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/client";
-import { getProposedInitiativeById } from "../../../../services/initiativeService";
-import { InitiativeStatus } from "../../../../../enums/status";
+import { rejectInitiativeById } from "@/services/initiativeService";
+import { authenticateUser } from "../../../../auth/authenticate-user/authenticate-user";
 
-export async function PUT(request, { params }){
-    const supabase = new createClient();
+export async function PUT(request, { params }) {
+    try {
+        const isUserAuthenticated = await authenticateUser();
+        
+        if(!isUserAuthenticated)
+        {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Unauthorized. Please sign in.",
+                },
+                { 
+                    status: 401 
+                }
+            );
+        }
 
-    const { initiativeId } = await params;
+        const { initiativeId } = await params;
+        const body = await request.json();
+        const rejectionReason = body.rejectionReason?.trim();
 
-    const response = await getProposedInitiativeById(supabase, initiativeId);
+        if (!rejectionReason) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Rejection reason is required.",
+                },
+                { status: 400 }
+            );
+        }
 
-    const initiativeData = await response.json();
+        const initiative = await rejectInitiativeById(initiativeId, rejectionReason);
 
-    if(initiativeData.success == false)
-    {
-        return NextResponse.json({
-            success: false,
-            message: "The initiative does not exists."
-        });
+        if (!initiative.success) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: initiative.message
+                },
+                { status: 400 }
+            );
+        }
+
+        return NextResponse.json(
+            {
+                success: true,
+                initiative: initiative.data,
+                message: initiative.message
+            },
+            { status: 200 }
+        );
+
+    } catch (error) {
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: error.message
+            },
+            { status: 500 }
+        );
     }
-
-    const { updateInitiative, error } = await supabase.from('initiative').update({"status":InitiativeStatus.REJECTED, "rejectionReason": "Update the initaitive"}).eq("id", initiativeId).select().single();
-
-    if(error) {
-        return NextResponse.json({
-            success: false,
-            message: error.message
-        });
-    }
-
-    return NextResponse.json({
-        success: true,
-        updateInitiative,
-        message: "The initiative has been rejected by Admin/Executive. Please reply by making modifications"
-    });
 }

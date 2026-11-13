@@ -1,12 +1,14 @@
+"use client";
 import { UserRoles } from "@/enums/userRole";
 import { useState } from "react";
 import Avatar from "../avatar";
 import { FUNCTIONS, ROLE_CONFIG } from '@/constants/constants';
 import { RoleBadge } from "../badge";
 
-export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUser, onRemoveUser}) 
+export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUser})
 {
     const [showInvite, setShowInvite] = useState(false);
+    const [showInviteNotice, setShowInviteNotice] = useState(false);
     const [inv, setInv] = useState({
         name: "",
         email: "",
@@ -16,38 +18,34 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUs
     });
     const isAdmin = currentUser.appRole === UserRoles.ADMIN;
 
-    const toggleFunc = (userId, func) => {
+    const toggleFunc = async (userId, func) => {
         const u = users.find((x) => x.id === userId);
-        if (!u) return;
-        const fns = u.functions || [];
-        const updated = fns.includes(func)
-        ? fns.filter((f) => f !== func)
-        : [...fns, func];
-        onUpdateUser(userId, { functions: updated });
-    };
-    const changeRole = (userId, newRole) => {
-        const updates = { appRole: newRole };
-        if (newRole === UserRoles.ADMIN || newRole === UserRoles.EXECUTIVE)
-        updates.functions = FUNCTIONS;
-        onUpdateUser(userId, updates);
-    };
-    const handleInvite = () => {
-        if (!inv.name.trim() || !inv.email.trim()) return;
-        onInviteUser({
-        id: generateId(),
-        name: inv.name.trim(),
-        email: inv.email.toLowerCase().trim(),
-        role: inv.role.trim() || "Team Member",
-        appRole: inv.appRole,
-        functions:
-            inv.appRole === UserRoles.ADMIN || inv.appRole === UserRoles.EXECUTIVE
-            ? FUNCTIONS
-            : inv.functions,
-        });
-        setInv({ name: "", email: "", role: "", appRole: UserRoles.MEMBER, functions: [] });
-        setShowInvite(false);
-    };
+        if (!u || u.appRole === UserRoles.ADMIN || u.appRole === UserRoles.EXECUTIVE) return;
 
+        const currentFunctions = Array.isArray(u.functions) ? u.functions : [];
+        const isCurrentlyAssigned = currentFunctions.some(
+            (assigned) => String(assigned).trim().toLowerCase() === String(func).trim().toLowerCase()
+        );
+        const updated = isCurrentlyAssigned
+            ? currentFunctions.filter((assigned) => String(assigned).trim().toLowerCase() !== String(func).trim().toLowerCase())
+            : [...currentFunctions, func];
+
+        // onUpdateUser persists the complete updated list to Supabase. The
+        // other function buttons retain their own independent assigned state.
+        await onUpdateUser(userId, { functions: updated });
+    };
+    const changeRole = async (userId, newRole) => {
+        const updates = { appRole: newRole };
+        if (newRole === UserRoles.ADMIN || newRole === UserRoles.EXECUTIVE) {
+            updates.functions = FUNCTIONS;
+        }
+        await onUpdateUser(userId, updates);
+    };
+    const handleSendInviteClick = () => {
+        // Invitation delivery is temporarily disabled. Keep the invite form
+        // available, but do not call an API or create/send an invitation.
+        setShowInviteNotice(true);
+    };
     if (!isAdmin)
         return (
         <div className="max-w-3xl mx-auto text-center py-16">
@@ -61,117 +59,134 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUs
         <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
             <div>
-            <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-            <p className="text-sm text-gray-500 mt-1">
-                Manage team access and initiative visibility
-            </p>
+                <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+                <p className="text-sm text-gray-500 mt-1">
+                    Manage team access and initiative visibility
+                </p>
             </div>
             <button
-            onClick={() => setShowInvite(!showInvite)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
+                type="button"
+                onClick={() => setShowInvite((visible) => !visible)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
             >
-            <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-            >
-                <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-                />
-            </svg>
-            Invite User
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Invite User
             </button>
         </div>
 
         {showInvite && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                Invite New User
-            </h3>
-            <div className="grid grid-cols-4 gap-3 mb-3">
-                <input
-                type="text"
-                placeholder="Full name"
-                value={inv.name}
-                onChange={(e) => setInv((s) => ({ ...s, name: e.target.value }))}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <input
-                type="email"
-                placeholder="email@rodeodental.com"
-                value={inv.email}
-                onChange={(e) => setInv((s) => ({ ...s, email: e.target.value }))}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <input
-                type="text"
-                placeholder="Job title"
-                value={inv.role}
-                onChange={(e) => setInv((s) => ({ ...s, role: e.target.value }))}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <select
-                value={inv.appRole}
-                onChange={(e) =>
-                    setInv((s) => ({ ...s, appRole: e.target.value }))
-                }
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
-                >
-                <option value="member">Member</option>
-                <option value="executive">Executive</option>
-                <option value="admin">Admin</option>
-                </select>
-            </div>
-            {inv.appRole === "member" && (
-                <div className="mb-3">
-                <p className="text-xs text-gray-500 mb-2">
-                    Function visibility (member can see initiatives in these
-                    functions):
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                    {FUNCTIONS.map((f) => (
-                    <button
-                        key={f}
-                        onClick={() =>
-                        setInv((s) => ({
-                            ...s,
-                            functions: s.functions.includes(f)
-                            ? s.functions.filter((x) => x !== f)
-                            : [...s.functions, f],
-                        }))
-                        }
-                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${inv.functions.includes(f) ? "bg-red-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Invite New User</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
+                    <input
+                        type="text"
+                        placeholder="Full name"
+                        value={inv.name}
+                        onChange={(e) => setInv((state) => ({ ...state, name: e.target.value }))}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    <input
+                        type="email"
+                        placeholder="Email address"
+                        value={inv.email}
+                        onChange={(e) => setInv((state) => ({ ...state, email: e.target.value }))}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    <input
+                        type="text"
+                        placeholder="Job title"
+                        value={inv.role}
+                        onChange={(e) => setInv((state) => ({ ...state, role: e.target.value }))}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    <select
+                        value={inv.appRole}
+                        onChange={(e) => setInv((state) => ({ ...state, appRole: e.target.value }))}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
                     >
-                        {f}
+                        <option value="member">Member</option>
+                        <option value="executive">Executive</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                {inv.appRole === UserRoles.MEMBER && (
+                    <div className="mb-3">
+                        <p className="text-xs text-gray-500 mb-2">Function visibility (the functions this member can access):</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {FUNCTIONS.map((func) => {
+                                const selected = inv.functions.includes(func);
+                                return (
+                                    <button
+                                        type="button"
+                                        key={func}
+                                        onClick={() => setInv((state) => ({
+                                            ...state,
+                                            functions: selected
+                                                ? state.functions.filter((item) => item !== func)
+                                                : [...state.functions, func],
+                                        }))}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${selected ? "bg-red-100 text-red-700 border-red-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}
+                                    >
+                                        {func}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={handleSendInviteClick}
+                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
+                    >
+                        Send Invite
                     </button>
-                    ))}
+                    <button
+                        type="button"
+                        onClick={() => setShowInvite(false)}
+                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        Cancel
+                    </button>
                 </div>
-                </div>
-            )}
-            <div className="flex gap-2">
-                <button
-                onClick={handleInvite}
-                disabled={!inv.name.trim() || !inv.email.trim()}
-                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-40"
-                >
-                Send Invite
-                </button>
-                <button
-                onClick={() => setShowInvite(false)}
-                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
-                >
-                Cancel
-                </button>
-            </div>
             </div>
         )}
 
+        {showInviteNotice && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={() => setShowInviteNotice(false)}>
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="invite-notice-title"
+                    className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" />
+                        </svg>
+                    </div>
+                    <h3 id="invite-notice-title" className="text-lg font-semibold text-gray-900 text-center">Invitations are temporarily unavailable</h3>
+                    <p className="mt-2 text-sm leading-6 text-gray-600 text-center">
+                        We’re sorry for the inconvenience. Sending invitations is temporarily paused while we update the email service. No invitation has been sent. Please try again later.
+                    </p>
+                    <div className="mt-6 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={() => setShowInviteNotice(false)}
+                            className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        >
+                            Got it
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            <div className="grid grid-cols-12 gap-2 px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-black uppercase tracking-wide">
             <div className="col-span-3">User</div>
             <div className="col-span-2">Role</div>
             <div className="col-span-6">Function Access</div>
@@ -188,15 +203,15 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUs
                     <div className="text-sm font-medium text-gray-900">
                     {u.name}
                     </div>
-                    <div className="text-xs text-gray-400">{u.email}</div>
+                    <div className="text-xs text-black">{u.email}</div>
                 </div>
                 </div>
                 <div className="col-span-2">
                 <select
-                    value={u.appRole}
+                    value={String(u.appRole || UserRoles.MEMBER).toLowerCase()}
                     onChange={(e) => changeRole(u.id, e.target.value)}
                     disabled={u.id === currentUser.id}
-                    className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                    className="text-xs text-black px-2 py-1 border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-100"
                 >
                     <option value="member">Member</option>
                     <option value="executive">Executive</option>
@@ -205,20 +220,32 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUs
                 </div>
                 <div className="col-span-6">
                 {u.appRole === "admin" || u.appRole === "executive" ? (
-                    <span className="text-xs text-gray-400 italic">
+                    <span className="text-xs text-black italic">
                     All functions (via {u.appRole} role)
                     </span>
                 ) : (
                     <div className="flex flex-wrap gap-1">
-                    {FUNCTIONS.map((f) => (
-                        <button
-                        key={f}
-                        onClick={() => toggleFunc(u.id, f)}
-                        className={`px-2 py-0.5 text-xs rounded-full transition-all ${(u.functions || []).includes(f) ? "bg-red-100 text-red-700 font-medium" : "bg-gray-50 text-gray-300 hover:bg-gray-100 hover:text-gray-500"}`}
-                        >
-                        {f}
-                        </button>
-                    ))}
+                    {FUNCTIONS.map((f) => {
+                        const assignedFunctions = Array.isArray(u.functions) ? u.functions : [];
+                        const isAssigned = assignedFunctions.some(
+                            (assigned) => String(assigned).trim().toLowerCase() === String(f).trim().toLowerCase()
+                        );
+                        return (
+                            <button
+                                key={f}
+                                onClick={() => toggleFunc(u.id, f)}
+                                aria-pressed={isAssigned}
+                                title={isAssigned ? "Assigned to this user" : "Not assigned to this user"}
+                                className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
+                                    isAssigned
+                                        ? "bg-red-100 text-red-700 border-red-200 font-medium"
+                                        : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                }`}
+                            >
+                                {f}
+                            </button>
+                        );
+                    })}
                     </div>
                 )}
                 </div>
@@ -226,7 +253,7 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUs
                 {u.id !== currentUser.id && (
                     <button
                     onClick={() => onRemoveUser(u.id)}
-                    className="text-xs text-gray-300 hover:text-red-500"
+                    className="text-xs text-black hover:text-red-600"
                     >
                     Remove
                     </button>

@@ -1,123 +1,387 @@
-import { createClient } from "@/lib/supabase/client";
+import {getMilestonesByUser, getMilestonesByInitiative, getMilestoneById, createMilestone, updateMilestone, deleteMilestoneById as deleteMilestoneFromRepository} from "../repositories/milestoneRepository";
+import { getUserByUserId } from "../repositories/userRepository";
+import { getInitiativeById } from "../repositories/initiativeRepository";
+import { UserRoles } from "../enums/userRole";
+
+// Admin / Executive / initiative owner
+const canManage = (user, initiative) =>
+    user.appRole === UserRoles.ADMIN ||
+    user.appRole === UserRoles.EXECUTIVE ||
+    initiative.ownerId === user.id;
 
 export async function getUserMilestones(userId) {
-    const supabase = new createClient();
+    try {
+        if (!userId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_ID_REQUIRED", 
+                message: "userId is required." };
+        }
 
-    const { data: user, error: userError } = await supabase
-        .from("users")
-        .select("appRole")
-        .eq("id", userId)
-        .single();
+        const user = await getUserByUserId(userId);
 
-    if (userError) {
-        throw new Error(userError.message);
+        if (!user) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_NOT_FOUND", 
+                message: "User not found." };
+        }
+
+        const milestones = await getMilestonesByUser(userId, user.appRole);
+
+        return {
+            success: true,
+            data: milestones,
+            code: null
+        };
     }
-
-    console.log("USER ID:", userId);
-    console.log("USER ROLE:", user.appRole);
-
-    let query = supabase
-        .from("milestones")
-        .select("*")
-        .eq("isDeleted", false)
-        .order("created_at", { ascending: false });
-
-    if (user.app_role === "member") {
-        query = query.contains("assignees", [userId]);
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONES_FETCH_BY_USER_FAILED",
+            message: error.message
+        };
     }
-
-    const { data: userMilestones, error: milestonesError } = await query;
-
-    if (milestonesError) {
-        throw new Error(error.message);
-    }
-
-    return userMilestones;
-}
-// Initiatives milestone method
-export async function getMilestonesByInitiative(initiativeId) {
-    const supabase = await createClient();
-    const { data: initiativeMilestones, error: initiativeMilestonesError } = await supabase
-        .from("milestones")
-        .select("*")
-        .eq("initiative_id", initiativeId)
-        .eq("isDeleted", false)
-        .order("created_at", { ascending: true });
-
-    if (initiativeMilestonesError) throw initiativeMilestonesError;
-
-    return initiativeMilestones;
 }
 
-// Updating milestone status
+export async function getInitiativeMilestones(initiativeId) {
+    try {
+        if (!initiativeId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_ID_REQUIRED", 
+                message: "initiativeId is required." };
+        }
 
-export async function updateMilestoneStatus(milestoneId, done) {
-    const supabase = await supabaseAdmin;
-    const { data: updatedMilestone, error: updateMilestoneError } = await supabase
-        .from("milestones")
-        .update({
-            done,
-            updated_at: new Date().toISOString(),
-        })
-        .eq("id", milestoneId)
-        .select();
+        const milestones = await getMilestonesByInitiative(initiativeId);
 
-    if (updateMilestoneError) {
-        throw new Error(updateMilestoneError.message);
+        return {
+            success: true,
+            data: milestones,
+            code: null
+        };
     }
-    if (!updatedMilestone || updatedMilestone.length === 0) {
-        throw new Error(
-            `Milestone ${milestoneId} was not found or cannot be updated`
-        );
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONES_FETCH_BY_INITIATIVE_FAILED",
+            message: error.message
+        };
     }
-
-    return updatedMilestone;
 }
 
+export async function getMilestone(milestoneId) {
+    try {
+        if (!milestoneId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_ID_REQUIRED", 
+                message: "milestoneId is required." };
+        }
 
-// Insert Milestone
-export async function createMilestone(initiativeId, milestoneData) {
-    const supabase = await supabaseAdmin;
+        const milestone = await getMilestoneById(milestoneId);
 
-    const { title, done, due_date, assignees, } = milestoneData;
+        if (!milestone) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_NOT_FOUND", 
+                message: "Milestone not found." };
+        }
 
-    const { data: newMilestone, error: createMilestoneError } = await supabase
-        .from("milestones")
-        .insert({
-            initiative_id: initiativeId,
-            title,
-            done: done ?? false,
-            due_date: due_date ?? null,
-            assignees: assignees ?? null,
-        })
-        .select();
-
-    if (createMilestoneError) {
-        throw new Error(createMilestoneError.message);
+        return {
+            success: true,
+            data: milestone,
+            code: null
+        };
     }
-
-    return newMilestone;
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONE_FETCH_FAILED",
+            message: error.message
+        };
+    }
 }
 
-// Soft delete milestone
-export async function deleteMilestone(initiativeId, milestoneId) {
-    const supabase = supabaseAdmin;
+export async function createNewMilestone(initiativeId, milestoneData, userId) {
+    try {
+        if (!initiativeId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_ID_REQUIRED", 
+                message: "initiativeId is required." };
+        }
 
-    const { deletedMilestone, error } = await supabase
-        .from("milestones")
-        .update({
-            isDeleted: true,
-            updated_at: new Date().toISOString(),
-        })
-        .eq("id", milestoneId)
-        .eq("initiative_id", initiativeId)
-        .eq("isDeleted", false)
-        .select()
-        .single();
+        if (!userId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_ID_REQUIRED", 
+                message: "userId is required." };
+        }
 
-    if (error) {
-        throw new Error(error.message);
+        const user = await getUserByUserId(userId);
+
+        if (!user) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_NOT_FOUND", 
+                message: "User not found." };
+        }
+
+        const initiative = await getInitiativeById(initiativeId);
+
+        if (!initiative) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_NOT_FOUND", 
+                message: "Initiative not found." };
+        }
+
+        if (!canManage(user, initiative)) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_CREATE_FORBIDDEN", 
+                message: "You are not allowed to create a milestone for this initiative." };
+        }
+
+        if (!milestoneData?.title || milestoneData.title.trim() === "") {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_TITLE_REQUIRED", 
+                message: "title is required." };
+        }
+
+        const milestone = await createMilestone(initiativeId, {
+            title: milestoneData.title.trim(),
+            done: milestoneData.done,
+            dueDate: milestoneData.dueDate || null, // UI sends "" when no date is picked
+            assignees: milestoneData.assignees
+        });
+
+        return {
+            success: true,
+            data: milestone,
+            code: null
+        };
     }
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONE_CREATION_FAILED",
+            message: error.message
+        };
+    }
+}
 
-    return deletedMilestone;
+export async function updateMilestoneById(milestoneId, milestoneData, userId) {
+    try {
+        if (!milestoneId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_ID_REQUIRED", 
+                message: "milestoneId is required." };
+        }
+
+        if (!userId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_ID_REQUIRED", 
+                message: "userId is required." };
+        }
+
+        const hasDone = milestoneData?.done !== undefined;
+        const hasAssignees = milestoneData?.assignees !== undefined;
+
+        if (!hasDone && !hasAssignees) {
+            return {
+                success: false,
+                data: null,
+                code: "MILESTONE_UPDATE_DATA_REQUIRED",
+                message: "Provide done or assignees to update."
+            };
+        }
+
+        if (hasDone && typeof milestoneData.done !== "boolean") {
+            return {
+                success: false,
+                data: null,
+                code: "INVALID_MILESTONE_STATUS",
+                message: "done must be true or false."
+            };
+        }
+
+        if (
+            hasAssignees &&
+            (!Array.isArray(milestoneData.assignees) ||
+                !milestoneData.assignees.every(id => typeof id === "string"))
+        ) {
+            return {
+                success: false,
+                data: null,
+                code: "INVALID_MILESTONE_ASSIGNEES",
+                message: "assignees must be an array of user IDs."
+            };
+        }
+
+        const user = await getUserByUserId(userId);
+
+        if (!user) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_NOT_FOUND", 
+                message: "User not found." };
+        }
+
+        const milestone = await getMilestoneById(milestoneId);
+
+        if (!milestone) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_NOT_FOUND", 
+                message: "Milestone not found." };
+        }
+
+        const initiative = await getInitiativeById(milestone.initiativeId);
+
+        if (!initiative) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_NOT_FOUND", 
+                message: "Initiative not found." };
+        }
+
+        const isAssigned = (milestone.assignees || []).includes(userId);
+
+        if (!canManage(user, initiative) && !isAssigned) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_UPDATE_FORBIDDEN", 
+                message: "You are not allowed to update this milestone." };
+        }
+
+        const updatedMilestone = await updateMilestone(milestoneId, milestoneData);
+
+        if (!updatedMilestone) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_NOT_FOUND", 
+                message: "Milestone not found or already deleted." };
+        }
+
+        return {
+            success: true,
+            data: updatedMilestone,
+            code: null
+        };
+    }
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONE_UPDATION_FAILED",
+            message: error.message
+        };
+    }
+}
+
+export async function deleteMilestoneById(initiativeId, milestoneId, userId) {
+    try {
+        if (!initiativeId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_ID_REQUIRED", 
+                message: "initiativeId is required." };
+        }
+
+        if (!milestoneId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_ID_REQUIRED", 
+                message: "milestoneId is required." };
+        }
+
+        if (!userId) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_ID_REQUIRED", 
+                message: "userId is required." };
+        }
+
+        const user = await getUserByUserId(userId);
+
+        if (!user) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "USER_NOT_FOUND", 
+                message: "User not found." };
+        }
+
+        const initiative = await getInitiativeById(initiativeId);
+
+        if (!initiative) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "INITIATIVE_NOT_FOUND", 
+                message: "Initiative not found." };
+        }
+
+        if (!canManage(user, initiative)) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_DELETE_FORBIDDEN", 
+                message: "You are not allowed to delete milestones on this initiative." };
+        }
+
+        const deletedMilestone = await deleteMilestoneFromRepository(initiativeId, milestoneId, userId);
+
+        if (!deletedMilestone) {
+            return { 
+                success: false, 
+                data: null, 
+                code: "MILESTONE_NOT_FOUND", 
+                message: "Milestone not found or already deleted." };
+        }
+
+        return {
+            success: true,
+            data: deletedMilestone,
+            code: null
+        };
+    }
+    catch (error) {
+        return {
+            success: false,
+            data: null,
+            code: "MILESTONE_DELETION_FAILED",
+            message: error.message
+        };
+    }
 }
