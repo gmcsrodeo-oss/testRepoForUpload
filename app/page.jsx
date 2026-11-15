@@ -22,15 +22,15 @@ import { Initiative } from "@/interfaces/initiative";
 import { Milestone } from "@/interfaces/milestone";
 
 export default function Home() {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState("summary");
-    const [initiatives, setInitiatives] = useState<Initiative[]>([]);
+    const [initiatives, setInitiatives] = useState([]);
     const [users, setUsers] = useState([]);
     const [editingInit, setEditingInit] = useState(null);
     const [returnView, setReturnView] = useState("initiatives");
-    const [selectedInit, setSelectedInit] = useState<Initiative | null>(null);
-    const [myMilestones, setMyMilestones] = useState<Milestone[]>([]);
+    const [selectedInit, setSelectedInit] = useState(null);
+    const [myMilestones, setMyMilestones] = useState([]);
     const [milestoneLoading, setMilestoneLoading] = useState(false);
     const [milestoneError, setMilestoneError] = useState("");
     const router = useRouter();
@@ -440,7 +440,7 @@ export default function Home() {
         }
     }
 
-    async function loadInitiatives(user: User) {
+    async function loadInitiatives(user) {
         try {
             if (user != undefined) {
                 setLoading(true);
