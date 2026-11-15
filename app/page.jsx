@@ -59,7 +59,7 @@ export default function Home() {
         // await saveData("session", null);
     };
 
-    const handleUpdateUser = async (userId: string, updates) => {
+    const handleUpdateUser = async (userId, updates) => {
         try {
             const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
                 method: "PUT",
