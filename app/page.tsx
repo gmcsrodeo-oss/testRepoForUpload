@@ -17,17 +17,20 @@ import MyMilestone from "./../components/MyMilestone/my-milestone";
 import InitiativeForm from './../components/InitiativeForm/initiative-form';
 import { logActivity, getActivityLogsByInitiative } from "./../repositories/activityRepository";
 import Approvals from "./../components/Approvals/approvals";
+import { User } from "@/interfaces/user";
+import { Initiative } from "@/interfaces/initiative";
+import { Milestone } from "@/interfaces/milestone";
 
 export default function Home() {
-    const [currentUser, setCurrentUser] = useState(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState("summary");
-    const [initiatives, setInitiatives] = useState([]);
+    const [initiatives, setInitiatives] = useState<Initiative[]>([]);
     const [users, setUsers] = useState([]);
     const [editingInit, setEditingInit] = useState(null);
     const [returnView, setReturnView] = useState("initiatives");
-    const [selectedInit, setSelectedInit] = useState(null);
-    const [myMilestones, setMyMilestones] = useState([]);
+    const [selectedInit, setSelectedInit] = useState<Initiative | null>(null);
+    const [myMilestones, setMyMilestones] = useState<Milestone[]>([]);
     const [milestoneLoading, setMilestoneLoading] = useState(false);
     const [milestoneError, setMilestoneError] = useState("");
     const router = useRouter();
