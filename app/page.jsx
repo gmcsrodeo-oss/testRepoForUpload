@@ -59,7 +59,7 @@ export default function Home() {
         // await saveData("session", null);
     };
 
-    const handleUpdateUser = async (userId, updates) => {
+    const handleUpdateUser = async (userId: string, updates) => {
         try {
             const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
                 method: "PUT",
@@ -440,7 +440,7 @@ export default function Home() {
         }
     }
 
-    async function loadInitiatives(user) {
+    async function loadInitiatives(user: User) {
         try {
             if (user != undefined) {
                 setLoading(true);
@@ -463,7 +463,7 @@ export default function Home() {
             }
         } catch (error) {
             console.log(error);
-            setInitiatives(null);
+            setInitiatives([]);
             setLoading(false);
         } finally {
             setLoading(false);
