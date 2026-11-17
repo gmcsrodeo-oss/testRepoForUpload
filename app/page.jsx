@@ -17,9 +17,6 @@ import MyMilestone from "./../components/MyMilestone/my-milestone";
 import InitiativeForm from './../components/InitiativeForm/initiative-form';
 import { logActivity, getActivityLogsByInitiative } from "./../repositories/activityRepository";
 import Approvals from "./../components/Approvals/approvals";
-import { User } from "@/interfaces/user";
-import { Initiative } from "@/interfaces/initiative";
-import { Milestone } from "@/interfaces/milestone";
 
 export default function Home() {
     const [currentUser, setCurrentUser] = useState(null);
@@ -90,9 +87,24 @@ export default function Home() {
         }
     };
 
-    const handleInviteUser = async () => {
-
-    }
+    const handleInviteUser = async (userData) => {
+        const response = await fetch("/api/users/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(userData),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to send invitation.");
+        }
+        const created = result.data;
+        setUsers((previous) => [...previous, {
+            ...created,
+            appRole: String(created.appRole || "member").toLowerCase(),
+            functions: Array.isArray(created.functions) ? created.functions : [],
+        }]);
+        return created;
+    };
 
     const handleRemoveUser = async (userId) => {
         if (!window.confirm("Remove this user from Initiative Tracker?")) return;
@@ -463,7 +475,7 @@ export default function Home() {
             }
         } catch (error) {
             console.log(error);
-            setInitiatives([]);
+            setInitiatives(null);
             setLoading(false);
         } finally {
             setLoading(false);
@@ -851,6 +863,7 @@ export default function Home() {
                         users={users}
                         currentUser={currentUser}
                         onUpdateUser={handleUpdateUser}
+                        onInviteUser={handleInviteUser}
                         onRemoveUser={handleRemoveUser}
                     />
                 )}
