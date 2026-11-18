@@ -87,24 +87,9 @@ export default function Home() {
         }
     };
 
-    const handleInviteUser = async (userData) => {
-        const response = await fetch("/api/users/invite", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(userData),
-        });
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || "Unable to send invitation.");
-        }
-        const created = result.data;
-        setUsers((previous) => [...previous, {
-            ...created,
-            appRole: String(created.appRole || "member").toLowerCase(),
-            functions: Array.isArray(created.functions) ? created.functions : [],
-        }]);
-        return created;
-    };
+    const handleInviteUser = async () => {
+
+    }
 
     const handleRemoveUser = async (userId) => {
         if (!window.confirm("Remove this user from Initiative Tracker?")) return;
@@ -129,9 +114,9 @@ export default function Home() {
             return;
         }
 
-        const initiative = initiatives?.find(
-            (item) => item.id === initiativeId
-        );
+        const initiative =
+            initiatives?.find((item) => item.id === initiativeId) ||
+            (selectedInit?.id === initiativeId ? selectedInit : null);
 
         const milestone = initiative?.milestones?.find(
             (item) => item.id === milestoneId
@@ -159,6 +144,11 @@ export default function Home() {
             const result = await response.json();
 
             if (!response.ok || !result.success) {
+                if (response.status === 403) {
+                    alert("You cannot edit this milestone.");
+                    return;
+                }
+
                 throw new Error(
                     result.message || "Unable to update milestone status."
                 );
@@ -193,6 +183,8 @@ export default function Home() {
                         ),
                     }
             );
+            // Refresh My Milestones after updating the status.
+            await loadMyMilestones(currentUser.id);
 
         } catch (error) {
             console.error("Error updating milestone:", error);
@@ -202,24 +194,49 @@ export default function Home() {
     const handleSave = async (form) => {
         const now = new Date().toISOString();
 
-        console.log(form);
-
         try {
             let response;
             let result;
 
-            let initiativeData = {
+            const isPrivilegedUser =
+                currentUser?.appRole === UserRoles.ADMIN ||
+                currentUser?.appRole === UserRoles.EXECUTIVE;
+
+            // Check whether this initiative was previously rejected.
+            const wasRejected =
+                editingInit?.status === InitiativeStatus.PROPOSED &&
+                !!editingInit?.rejectionReason;
+
+            const resubmitted = !!editingInit && wasRejected;
+
+            // Members must always submit initiatives as Proposed.
+            // Admins and Executives can select the status.
+            const finalStatus =
+                !editingInit && !isPrivilegedUser
+                    ? InitiativeStatus.PROPOSED
+                    : form.status;
+
+            // Prepare initiative data.
+            const initiativeData = {
                 title: form.title,
                 description: form.description,
                 ownerId: form.ownerId,
                 func: form.func,
-                status: form.status,
+                status: finalStatus,
                 confidential: form.confidential,
                 health: form.health,
                 healthNote: form.healthNote,
                 financials: form.financials,
-                isDeleted: false
-            }
+
+                // Clear rejection reason when resubmitting or
+                // when the initiative moves away from Proposed.
+                rejectionReason:
+                    resubmitted || finalStatus !== InitiativeStatus.PROPOSED
+                        ? null
+                        : editingInit?.rejectionReason ?? null,
+
+                isDeleted: false,
+            };
 
             if (editingInit) {
                 // Update existing initiative
@@ -255,73 +272,237 @@ export default function Home() {
                 throw new Error(result.message || "Unable to save initiative");
             }
 
-            if(result.success)
-            {
-                let activity;
-                if(editingInit)
-                {
-                    activity = {
-                        initiativeId: result.initiative.data.id,
-                        userId: form.ownerId,
-                        action: "Edited Initiative",
-                        timestamp: now
-                    }
+            const initiativeId = result.initiative.data.id;
+
+            const activity = {
+                initiativeId,
+                userId: currentUser.id,
+                action: editingInit
+                    ? resubmitted
+                        ? "Resubmitted after rejection"
+                        : "Edited Initiative"
+                    : isPrivilegedUser
+                        ? "Created initiative"
+                        : "Proposed initiative",
+                timestamp: now,
+            };
+
+            await logActivity(activity);
+
+            const existingMilestones = (
+                editingInit?.milestones || []
+            ).filter((milestone) => !milestone.isDeleted);
+
+            const existingMilestoneMap = new Map(
+                existingMilestones.map((milestone) => [
+                    milestone.id,
+                    milestone,
+                ])
+            );
+
+            const formMilestones = form.milestones || [];
+
+            // IDs of milestones still present in the form.
+            const currentMilestoneIds = new Set(
+                formMilestones
+                    .filter((milestone) => milestone.id)
+                    .map((milestone) => milestone.id)
+            );
+
+
+            // Include existing milestones that remain in the form.
+            const duplicateKeys = new Set();
+
+            for (const milestone of existingMilestones) {
+                if (!currentMilestoneIds.has(milestone.id)) {
+                    continue;
                 }
-                else{
-                    activity = {
-                        initiativeId: result.initiative.data.id,
-                        userId: form.ownerId,
-                        action: isPrivileged ? "Created initiative" : "Proposed initiative",
-                        timestamp: now
+
+                const key = `${(milestone.title || "")
+                    .trim()
+                    .toLowerCase()}|${milestone.dueDate || ""}`;
+
+                duplicateKeys.add(key);
+            }
+
+
+            for (const milestone of formMilestones) {
+                const assignees = [
+                    ...new Set(
+                        Array.isArray(milestone.assignees)
+                            ? milestone.assignees
+                            : []
+                    ),
+                ];
+
+                //if (milestone.id) {
+                if (
+                    milestone.id &&
+                    existingMilestoneMap.has(milestone.id)
+                ) {
+                    const existingMilestone =
+                        existingMilestoneMap.get(milestone.id);
+
+                    if (!existingMilestone) {
+                        throw new Error(
+                            `Milestone "${milestone.title}" was not found in the original initiative.`
+                        );
                     }
-                }
-                
-                const activityResult = await logActivity(activity);
 
-                const existingMilestoneIds = new Set(
-                    (selectedInit?.milestones || []).map(m => m.id)
-                );
+                    // Compare old and new assignees.
+                    const oldAssignees = [
+                        ...(existingMilestone.assignees || []),
+                    ].sort();
 
-                const newMilestones = (form.milestones || []).filter(
-                    milestone => !milestone.id || !existingMilestoneIds.has(milestone.id)
-                );
+                    const newAssignees = [...assignees].sort();
 
-                if(newMilestones.length > 0)
-                {
-                    const milestones = newMilestones.map((milestone) => ({
-                        title: milestone.title,
-                        done: milestone.done,
-                        dueDate: milestone.dueDate,
-                        assignees: milestone.assignees,
-                        initiativeId: result.initiative.data.id,
-                        isDeleted: false
-                    }));
-                    
-                    for(const milestone of milestones)
-                    {
-                        const milestoneResponse = await fetch("/api/initiative/"+ result.initiative.data.id +"/milestones", {
-                            method: "POST",
+                    const assigneesChanged =
+                        JSON.stringify(oldAssignees) !==
+                        JSON.stringify(newAssignees);
+
+                    const doneChanged =
+                        (existingMilestone.done ?? false) !==
+                        (milestone.done ?? false);
+
+                    // No changes required for this milestone.
+                    if (!assigneesChanged && !doneChanged) {
+                        continue;
+                    }
+
+                    const milestoneData = {
+                        done: milestone.done ?? false,
+                        assignees,
+                        userId: currentUser.id,
+                    };
+
+                    const milestoneResponse = await fetch(
+                        `/api/milestones/${milestone.id}`,
+                        {
+                            method: "PUT",
                             headers: {
-                            "Content-Type": "application/json",
+                                "Content-Type": "application/json",
                             },
-                            body: JSON.stringify(milestone),
-                        });
+                            body: JSON.stringify(milestoneData),
+                        }
+                    );
+
+                    const milestoneResult =
+                        await milestoneResponse.json();
+
+                    if (
+                        !milestoneResponse.ok ||
+                        !milestoneResult.success
+                    ) {
+                        throw new Error(
+                            milestoneResult.message ||
+                            `Failed to update milestone "${milestone.title}".`
+                        );
+                    }
+
+                    continue;
+                }
+
+                const title = (milestone.title || "").trim();
+                const dueDate = milestone.dueDate || null;
+
+                if (!title) {
+                    throw new Error(
+                        "Milestone title cannot be empty."
+                    );
+                }
+
+                const duplicateKey =
+                    `${title.toLowerCase()}|${dueDate || ""}`;
+
+                if (duplicateKeys.has(duplicateKey)) {
+                    throw new Error(
+                        `Duplicate milestone "${title}" with the same due date is not allowed.`
+                    );
+                }
+
+                duplicateKeys.add(duplicateKey);
+
+                const milestoneData = {
+                    title,
+                    done: milestone.done ?? false,
+                    dueDate,
+                    assignees,
+                    initiativeId,
+                    isDeleted: false,
+                };
+
+                const milestoneResponse = await fetch(
+                    `/api/initiative/${initiativeId}/milestones`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(milestoneData),
+                    }
+                );
 
                         const milestoneResult = await milestoneResponse.json();
 
-                        if (!milestoneResponse.ok || !milestoneResult.success) {
+                if (
+                    !milestoneResponse.ok ||
+                    !milestoneResult.success
+                ) {
+                    throw new Error(
+                        milestoneResult.message ||
+                        `Failed to create milestone "${title}".`
+                    );
+                }
+            }
+
+            // --------------------------------------------------
+            // 6. SOFT-DELETE REMOVED MILESTONES
+            // --------------------------------------------------
+
+            if (editingInit) {
+                for (const milestone of existingMilestones) {
+                    // If the original milestone is no longer in
+                    // the form, mark it as deleted.
+                    if (!currentMilestoneIds.has(milestone.id)) {
+                        const deleteResponse = await fetch(
+                            `/api/initiative/${initiativeId}/milestones/${milestone.id}?userId=${encodeURIComponent(currentUser.id)}`,
+                            {
+                                method: "DELETE",
+                            }
+                        );
+
+                        const deleteResult =
+                            await deleteResponse.json();
+
+                        const deleteSucceeded =
+                            deleteResponse.ok &&
+                            (
+                                deleteResult.success === true ||
+                                !!deleteResult.deletedMilestone
+                            );
+
+                        if (!deleteSucceeded) {
                             throw new Error(
-                            `Failed to create milestone "${milestone.title}": ${
-                                result.message || "Unknown error"
-                            }`
+                                deleteResult.message ||
+                                deleteResult.error ||
+                                `Failed to delete milestone "${milestone.title}".`
                             );
                         }
                     }
                 }
             }
 
+            //  REFRESH MY MILESTONES
+            await loadMyMilestones(currentUser.id);
+
+            // REFRESH INITIATIVES
             await loadInitiatives(currentUser);
-            const init = await fetch(`/api/initiative/${result.initiative.data.id}`);
+
+            // FETCH UPDATED INITIATIVE DETAILS
+            const init = await fetch(
+                `/api/initiative/${initiativeId}`
+            );
+
             const detailResult = await init.json();
 
             if (!init.ok || !detailResult.success) {
@@ -330,10 +511,18 @@ export default function Home() {
                 );
             }
 
-            // Set the actual initiative data, not the Response object
-            setSelectedInit(detailResult.initiative?.data[0]);
+            const updatedInitiative =
+                detailResult.initiative?.data?.[0];
 
-            // Close form and navigate to detail view
+            if (!updatedInitiative) {
+                throw new Error(
+                    "Updated initiative details were not returned."
+                );
+            }
+
+            // UPDATE SELECTED INITIATIVE AND NAVIGATE
+            setSelectedInit(updatedInitiative);
+
             setEditingInit(null);
             setView("detail");
             
@@ -589,6 +778,18 @@ export default function Home() {
                 );
             }
 
+            // Record approval activity
+            try {
+                await logActivity({
+                    initiativeId: initiativeId,
+                    userId: currentUser.id,
+                    action: "Approved initiative",
+                    timestamp: new Date().toISOString(),
+                });
+            } catch (activityError) {
+                console.error("Failed to save approval activity:", activityError);
+            }
+
             await loadInitiatives(currentUser);
         } catch (error) {
             console.error("Approve initiative failed:", error);
@@ -618,10 +819,24 @@ export default function Home() {
                 throw new Error(result.error || "Failed to reject initiative.");
             }
 
+            // Record rejection activity
+            try {
+                await logActivity({
+                    initiativeId,
+                    userId: currentUser.id,
+                    action: `Rejected: ${reason.trim()}`,
+                    timestamp: new Date().toISOString(),
+                });
+            } catch (activityError) {
+                console.error("Failed to save rejection activity:", activityError);
+            }
+
             await loadInitiatives(currentUser);
+            return true;
         } catch (error) {
             console.error("Reject initiative failed:", error);
             alert(error.message);
+            return false;
         }
     };
 
@@ -830,18 +1045,46 @@ export default function Home() {
                         loading={milestoneLoading}
                         error={milestoneError}
                         onRefresh={() => loadMyMilestones(currentUser.id)}
-                        onSelectInitiative={(initiativeId) => {
-                            const initiative = initiatives.find(
+                        onSelectInitiative={async (initiativeId) => {
+                            const initiative = initiatives?.find(
                                 (item) => item.id === initiativeId
                             );
 
                             if (initiative) {
                                 selectInit(initiative);
-                            } else {
-                                console.error(
-                                    "Initiative not found for milestone:",
-                                    initiativeId
+                                return;
+                            }
+
+                            try {
+                                const response = await fetch(
+                                    `/api/initiative/${initiativeId}`
                                 );
+
+                                const result = await response.json();
+
+                                if (!response.ok) {
+                                    throw new Error(
+                                        result.message || "Unable to load initiative."
+                                    );
+                                }
+
+                                const selectedInitiative =
+                                    result.initiative?.data?.[0] ||
+                                    result.data?.[0] ||
+                                    result.data ||
+                                    result.initiative;
+
+                                if (!selectedInitiative) {
+                                    throw new Error("Initiative not found.");
+                                }
+
+                                setReturnView("mymilestones");
+                                setSelectedInit(selectedInitiative);
+                                setView("detail");
+
+                            } catch (error) {
+                                console.error("Error opening initiative:", error);
+                                alert(error.message || "Unable to open initiative.");
                             }
                         }}
                     />
@@ -863,7 +1106,6 @@ export default function Home() {
                         users={users}
                         currentUser={currentUser}
                         onUpdateUser={handleUpdateUser}
-                        onInviteUser={handleInviteUser}
                         onRemoveUser={handleRemoveUser}
                     />
                 )}
