@@ -1,10 +1,10 @@
  "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function AuthConfirmPage() {
+export default function AuthConfirmContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [message, setMessage] = useState("Confirming your invitation…");
@@ -51,5 +51,13 @@ export default function AuthConfirmPage() {
         <p>{message}</p>
       </section>
     </main>
+  );
+}
+
+export default function AuthConfirmPage() {
+  return (
+    <Suspense fallback={<div>Confirming your invitation...</div>}>
+      <AuthConfirmContent />
+    </Suspense>
   );
 }
