@@ -5,10 +5,12 @@ import Avatar from "../avatar";
 import { FUNCTIONS, ROLE_CONFIG } from '@/constants/constants';
 import { RoleBadge } from "../badge";
 
-export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUser})
+export default function AdminPanel({users, currentUser, onUpdateUser, onInviteUser, onRemoveUser})
 {
     const [showInvite, setShowInvite] = useState(false);
-    const [showInviteNotice, setShowInviteNotice] = useState(false);
+    const [sendingInvite, setSendingInvite] = useState(false);
+    const [inviteMessage, setInviteMessage] = useState("");
+    const [inviteError, setInviteError] = useState("");
     const [inv, setInv] = useState({
         name: "",
         email: "",
@@ -41,10 +43,29 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUs
         }
         await onUpdateUser(userId, updates);
     };
-    const handleSendInviteClick = () => {
-        // Invitation delivery is temporarily disabled. Keep the invite form
-        // available, but do not call an API or create/send an invitation.
-        setShowInviteNotice(true);
+    const handleSendInviteClick = async () => {
+        if (!inv.name.trim() || !inv.email.trim() || sendingInvite) return;
+        setSendingInvite(true);
+        setInviteMessage("");
+        setInviteError("");
+        try {
+            await onInviteUser({
+                name: inv.name.trim(),
+                email: inv.email.trim().toLowerCase(),
+                role: inv.role.trim() || "Team Member",
+                appRole: inv.appRole,
+                functions: inv.appRole === UserRoles.ADMIN || inv.appRole === UserRoles.EXECUTIVE
+                    ? FUNCTIONS
+                    : inv.functions,
+            });
+            setInviteMessage(`Invitation email sent to ${inv.email.trim()}.`);
+            setInv({ name: "", email: "", role: "", appRole: UserRoles.MEMBER, functions: [] });
+            setShowInvite(false);
+        } catch (error) {
+            setInviteError(error?.message || "Unable to send invitation.");
+        } finally {
+            setSendingInvite(false);
+        }
     };
     if (!isAdmin)
         return (
@@ -76,6 +97,8 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUs
             </button>
         </div>
 
+        {inviteMessage && <p role="status" className="mb-3 text-sm text-green-700">{inviteMessage}</p>}
+        {inviteError && <p role="alert" className="mb-3 text-sm text-red-700">{inviteError}</p>}
         {showInvite && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">Invite New User</h3>
@@ -140,9 +163,10 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUs
                     <button
                         type="button"
                         onClick={handleSendInviteClick}
-                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700"
+                        disabled={!inv.name.trim() || !inv.email.trim() || sendingInvite}
+                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-40"
                     >
-                        Send Invite
+                        {sendingInvite ? "Sending..." : "Send Invite"}
                     </button>
                     <button
                         type="button"
@@ -155,36 +179,6 @@ export default function AdminPanel({users, currentUser, onUpdateUser, onRemoveUs
             </div>
         )}
 
-        {showInviteNotice && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={() => setShowInviteNotice(false)}>
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="invite-notice-title"
-                    className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" />
-                        </svg>
-                    </div>
-                    <h3 id="invite-notice-title" className="text-lg font-semibold text-gray-900 text-center">Invitations are temporarily unavailable</h3>
-                    <p className="mt-2 text-sm leading-6 text-gray-600 text-center">
-                        We’re sorry for the inconvenience. Sending invitations is temporarily paused while we update the email service. No invitation has been sent. Please try again later.
-                    </p>
-                    <div className="mt-6 flex justify-center">
-                        <button
-                            type="button"
-                            onClick={() => setShowInviteNotice(false)}
-                            className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                        >
-                            Got it
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-black uppercase tracking-wide">
             <div className="col-span-3">User</div>

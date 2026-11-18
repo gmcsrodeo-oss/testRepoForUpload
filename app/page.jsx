@@ -87,9 +87,24 @@ export default function Home() {
         }
     };
 
-    const handleInviteUser = async () => {
-
-    }
+    const handleInviteUser = async (userData) => {
+        const response = await fetch("/api/users/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(userData),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to send invitation.");
+        }
+        const created = result.data;
+        setUsers((previous) => [...previous, {
+            ...created,
+            appRole: String(created.appRole || "member").toLowerCase(),
+            functions: Array.isArray(created.functions) ? created.functions : [],
+        }]);
+        return created;
+    };
 
     const handleRemoveUser = async (userId) => {
         if (!window.confirm("Remove this user from Initiative Tracker?")) return;
@@ -1106,6 +1121,7 @@ export default function Home() {
                         users={users}
                         currentUser={currentUser}
                         onUpdateUser={handleUpdateUser}
+                        onInviteUser={handleInviteUser}
                         onRemoveUser={handleRemoveUser}
                     />
                 )}
