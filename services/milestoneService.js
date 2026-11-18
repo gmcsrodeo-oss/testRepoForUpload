@@ -1,14 +1,24 @@
-import {getMilestonesByUser, getMilestonesByInitiative, getMilestoneById, createMilestone, updateMilestone, deleteMilestoneById as deleteMilestoneFromRepository} from "../repositories/milestoneRepository";
+import { getMilestonesByUser, getMilestonesByInitiative, getMilestoneById, createMilestone, updateMilestone, deleteMilestoneById as deleteMilestoneFromRepository } from "../repositories/milestoneRepository";
 import { getUserByUserId } from "../repositories/userRepository";
 import { getInitiativeById } from "../repositories/initiativeRepository";
 import { UserRoles } from "../enums/userRole";
 
 // Admin / Executive / initiative owner
-const canManage = (user, initiative) =>
-    user.appRole === UserRoles.ADMIN ||
-    user.appRole === UserRoles.EXECUTIVE ||
-    initiative.ownerId === user.id;
+// const canManage = (user, initiative) =>
+//     user.appRole === UserRoles.ADMIN ||
+//     user.appRole === UserRoles.EXECUTIVE ||
+//     initiative.ownerId === user.id;
 
+
+const canManage = (user, initiative) => {
+    const role = String(user?.appRole || "").trim().toLowerCase();
+
+    return (
+        role === "admin" ||
+        role === "executive" ||
+        initiative?.ownerId === user?.id
+    );
+};
 export async function getUserMilestones(userId) {
     try {
         if (!userId) {
@@ -260,7 +270,11 @@ export async function updateMilestoneById(milestoneId, milestoneData, userId) {
                 message: "Milestone not found." };
         }
 
-        const initiative = await getInitiativeById(milestone.initiativeId);
+        const initiativeResult = await getInitiativeById(milestone.initiativeId);
+
+        const initiative = Array.isArray(initiativeResult)
+            ? initiativeResult[0]
+            : initiativeResult;
 
         if (!initiative) {
             return { 
@@ -342,7 +356,11 @@ export async function deleteMilestoneById(initiativeId, milestoneId, userId) {
                 message: "User not found." };
         }
 
-        const initiative = await getInitiativeById(initiativeId);
+        const initiativeResult = await getInitiativeById(initiativeId);
+
+        const initiative = Array.isArray(initiativeResult)
+            ? initiativeResult[0]
+            : initiativeResult;
 
         if (!initiative) {
             return { 

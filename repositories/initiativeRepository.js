@@ -129,7 +129,7 @@ export async function acceptInitiative(initiativeId, approvedBy) {
     const { data: initiative, error } = await supabase
         .from("initiative")
         .update({
-            status: InitiativeStatus.ACCEPTED,
+            status: InitiativeStatus.NOTSTARTED,
             approvedBy: approvedBy,
             approvedAt: now,
             updatedAt: now,
@@ -152,7 +152,6 @@ export async function rejectInitiative(initiativeId, rejectionReason) {
     const { data: initiative, error } = await supabase
         .from("initiative")
         .update({
-            status: InitiativeStatus.REJECTED,
             rejectionReason: rejectionReason,
             updatedAt: now
         })

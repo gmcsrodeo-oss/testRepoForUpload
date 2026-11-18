@@ -24,13 +24,15 @@ export default function Approvals({
         (initiative) => initiative.status === InitiativeStatus.PROPOSED
     );
 
-    const submitReject = (initiativeId) => {
+    const submitReject = async (initiativeId) => {
         if (!reason.trim()) return;
 
-        onReject(initiativeId, reason.trim());
+        const success = await onReject(initiativeId, reason.trim());
 
-        setRejectingId(null);
-        setReason("");
+        if (success) {
+            setRejectingId(null);
+            setReason("");
+        }
     };
 
     const relativeTime = (dateValue) => {
